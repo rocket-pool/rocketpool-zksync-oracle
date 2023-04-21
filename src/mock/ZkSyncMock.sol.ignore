@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.13;
+
+import "forge-std/Test.sol";
+
+contract ZkSyncMock {
+    address constant VM_ADDRESS = address(bytes20(uint160(uint256(keccak256('hevm cheat code')))));
+    Vm public constant vm = Vm(VM_ADDRESS);
+
+    uint256 private constant L1_GAS_PER_PUBDATA_BYTE = 17;
+    uint256 private constant FAIR_L2_GAS_PRICE = 0.5 gwei;
+
+    uint256 id = 0;
+
+    function requestL2Transaction(
+        address _contractL2,
+        uint256 _l2Value,
+        bytes calldata _calldata,
+        uint256 _l2GasLimit,
+        uint256 _l2GasPerPubdataByteLimit,
+        bytes[] calldata _factoryDeps,
+        address _refundRecipient
+    ) external payable returns (bytes32) {
+        // Call the target (ignore failure as it can't be handled in a real cross chain environment)
+        vm.prank(msg.sender);
+        (bool success,) = _contractL2.call{value : _l2Value}(_calldata);
+        // Silence unused local variable warning
+        assert(success == success);
+        // Return some random bytes as a fake hash
+        return bytes32(keccak256(abi.encodePacked(++id)));
+    }
+
+    /// @notice Estimates the cost in Ether of requesting execution of an L2 transaction from L1
+    /// @return The estimated L2 gas for the transaction to be paid
+    function l2TransactionBaseCost(
+        uint256 _gasPrice,
+        uint256 _l2GasLimit,
+        uint256 _l2GasPerPubdataByteLimit
+    ) public pure returns (uint256) {
+        uint256 l2GasPrice = _deriveL2GasPrice(_gasPrice, _l2GasPerPubdataByteLimit);
+        return l2GasPrice * _l2GasLimit;
+    }
+
+    /// @notice Derives the price for L2 gas in ETH to be paid.
+    /// @param _l1GasPrice The gas price on L1.
+    /// @param _gasPricePerPubdata The price for each pubdata byte in L2 gas
+    function _deriveL2GasPrice(uint256 _l1GasPrice, uint256 _gasPricePerPubdata) internal pure returns (uint256) {
+        uint256 pubdataPriceETH = L1_GAS_PER_PUBDATA_BYTE * _l1GasPrice;
+        uint256 minL2GasPriceETH = (pubdataPriceETH + _gasPricePerPubdata - 1) / _gasPricePerPubdata;
+
+        return max(FAIR_L2_GAS_PRICE, minL2GasPriceETH);
+    }
+
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a > b ? a : b;
+    }
+}

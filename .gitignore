@@ -1,0 +1,9 @@
+.idea
+cache/
+node_modules/
+out/
+.env
+artifacts/
+artifacts-zk/
+cache_hardhat/
+cache_hardhat-zk/
